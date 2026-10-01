@@ -8,6 +8,8 @@
   // ─── State ──────────────────────────────────────
   const state = {
     cookiesPath: null,
+    defaultCookiesPath: null,
+    defaultCookiesDisplay: null,
     videoInfo: null,
     downloadId: null,
     selectedQuality: '1080',
@@ -27,6 +29,13 @@
     cookiesStatus: $('#cookies-status'),
     cookiesFilename: $('#cookies-filename'),
     cookiesRemove: $('#cookies-remove'),
+    cookiesDetectedBox: $('#cookies-detected-box'),
+    cookiesDetectedPath: $('#cookies-detected-path'),
+    cookiesDetectedUse: $('#cookies-detected-use'),
+    cookiesPathToggle: $('#cookies-path-toggle'),
+    cookiesPathForm: $('#cookies-path-form'),
+    cookiesManualPath: $('#cookies-manual-path'),
+    cookiesManualBtn: $('#cookies-manual-btn'),
 
     // URL
     urlInput: $('#url-input'),
@@ -42,6 +51,7 @@
     videoChannel: $('#video-channel'),
     videoViews: $('#video-views'),
     videoDuration: $('#video-duration-badge'),
+    videoMemberBadge: $('#video-member-badge'),
 
     // Quality & Download
     stepQuality: $('#step-quality'),
@@ -115,9 +125,11 @@
   }
 
   /** Toggle loading state */
-  function setLoading(loading) {
+  function setLoading(loading, message = 'Mengambil data video...') {
     state.isLoading = loading;
     dom.loading.hidden = !loading;
+    const loadingText = dom.loading.querySelector('span');
+    if (loadingText) loadingText.textContent = message;
     dom.fetchBtn.disabled = loading;
   }
 
@@ -129,19 +141,27 @@
     return data;
   }
 
-  // ─── Cookies Upload ─────────────────────────────
+  // ─── Cookies Management ─────────────────────────
+
+  function setCookiesActive(path, label) {
+    state.cookiesPath = path;
+    dom.cookiesFilename.textContent = `${label} ✓`;
+    dom.dropzone.hidden = true;
+    if (dom.cookiesDetectedBox) dom.cookiesDetectedBox.hidden = true;
+    if (dom.cookiesPathForm) dom.cookiesPathForm.hidden = true;
+    dom.cookiesStatus.hidden = false;
+  }
 
   function handleCookiesFile(file) {
     if (!file) return;
 
-    // Basic validation
     if (!file.name.endsWith('.txt')) {
-      showError('Please upload a .txt file (Netscape cookies format).');
+      showError('Harap upload file .txt (format Netscape cookies).');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showError('File is too large. Cookies.txt should be under 5 MB.');
+      showError('Ukuran file terlalu besar. File cookies.txt maksimal 5 MB.');
       return;
     }
 
@@ -154,14 +174,10 @@
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-
-        state.cookiesPath = data.cookiesPath;
-        dom.cookiesFilename.textContent = `${data.filename} uploaded ✓`;
-        dom.dropzone.hidden = true;
-        dom.cookiesStatus.hidden = false;
+        setCookiesActive(data.cookiesPath, `${data.filename} terunggah`);
       })
       .catch((err) => {
-        showError(`Failed to upload cookies: ${err.message}`);
+        showError(`Gagal upload cookies: ${err.message}`);
       });
   }
 
@@ -170,6 +186,63 @@
     dom.dropzone.hidden = false;
     dom.cookiesStatus.hidden = true;
     dom.cookiesInput.value = '';
+    if (state.defaultCookiesPath && dom.cookiesDetectedBox) {
+      dom.cookiesDetectedBox.hidden = false;
+    }
+  }
+
+  // Check if default cookies are present on the system
+  async function checkDefaultCookies() {
+    try {
+      const data = await api('/api/cookies-info');
+      if (data.hasDefault) {
+        state.defaultCookiesPath = data.defaultPath;
+        state.defaultCookiesDisplay = data.displayPath;
+        if (dom.cookiesDetectedPath) {
+          dom.cookiesDetectedPath.textContent = data.displayPath;
+        }
+        if (dom.cookiesDetectedBox && !state.cookiesPath) {
+          dom.cookiesDetectedBox.hidden = false;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not check default cookies:', e.message);
+    }
+  }
+
+  if (dom.cookiesDetectedUse) {
+    dom.cookiesDetectedUse.addEventListener('click', () => {
+      if (state.defaultCookiesPath) {
+        setCookiesActive(state.defaultCookiesPath, `${state.defaultCookiesDisplay} (Siap)`);
+      }
+    });
+  }
+
+  if (dom.cookiesPathToggle) {
+    dom.cookiesPathToggle.addEventListener('click', () => {
+      dom.cookiesPathForm.hidden = !dom.cookiesPathForm.hidden;
+      if (!dom.cookiesPathForm.hidden) {
+        dom.cookiesManualPath.focus();
+      }
+    });
+  }
+
+  if (dom.cookiesManualBtn) {
+    dom.cookiesManualBtn.addEventListener('click', async () => {
+      const p = dom.cookiesManualPath.value.trim();
+      if (!p) return;
+      try {
+        const res = await api('/api/validate-cookies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: p }),
+        });
+        setCookiesActive(res.resolvedPath, `${p} (Divalidasi)`);
+        hideError();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
   }
 
   // Dropzone events
@@ -213,19 +286,19 @@
     const url = dom.urlInput.value.trim();
 
     if (!url) {
-      showError('Please enter a YouTube video URL.');
+      showError('Silakan masukkan link/URL video YouTube.');
       dom.urlInput.focus();
       return;
     }
 
-    // Basic URL validation
     if (!url.includes('youtube.com/') && !url.includes('youtu.be/')) {
-      showError('Please enter a valid YouTube URL (youtube.com or youtu.be).');
+      showError('URL tidak valid. Masukkan link dari youtube.com atau youtu.be.');
       return;
     }
 
     hideError();
-    setLoading(true);
+    const effectiveCookies = state.cookiesPath || state.defaultCookiesPath;
+    setLoading(true, effectiveCookies ? 'Mengambil data video dengan otentikasi cookies...' : 'Mengambil data video...');
 
     // Reset previous state
     dom.videoInfo.hidden = true;
@@ -240,7 +313,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
-          cookiesPath: state.cookiesPath,
+          cookiesPath: effectiveCookies,
         }),
       });
 
@@ -253,6 +326,16 @@
       dom.videoChannel.textContent = info.channel;
       dom.videoViews.textContent = formatViews(info.viewCount);
       dom.videoDuration.textContent = formatDuration(info.duration);
+
+      // Show membership badge if applicable
+      if (dom.videoMemberBadge) {
+        if (info.availability === 'subscriber_only') {
+          dom.videoMemberBadge.hidden = false;
+          dom.videoMemberBadge.textContent = '👑 Members-Only';
+        } else {
+          dom.videoMemberBadge.hidden = true;
+        }
+      }
 
       // Show sections
       dom.videoInfo.hidden = false;
@@ -268,6 +351,10 @@
   dom.urlInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchVideoInfo();
   });
+
+  // Run initial cookies check on startup
+  checkDefaultCookies();
+
 
   // ─── Quality Selector ──────────────────────────
 
@@ -313,7 +400,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
-          cookiesPath: state.cookiesPath,
+          cookiesPath: state.cookiesPath || state.defaultCookiesPath,
           quality: state.selectedQuality,
           title: state.videoInfo.title,
         }),

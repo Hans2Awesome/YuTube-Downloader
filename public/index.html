@@ -61,6 +61,14 @@
                     <span class="dropzone__hint">or click to browse files</span>
                 </div>
 
+                <div class="cookies-detected" id="cookies-detected-box" hidden>
+                    <div class="cookies-detected__info">
+                        <span>⚡ Cookies terdeteksi:</span>
+                        <strong id="cookies-detected-path"></strong>
+                    </div>
+                    <button type="button" class="cookies-detected__btn" id="cookies-detected-use">Gunakan File Ini</button>
+                </div>
+
                 <div class="cookies-status" id="cookies-status" hidden>
                     <svg class="cookies-status__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
@@ -73,7 +81,16 @@
                         </svg>
                     </button>
                 </div>
+
+                <div class="cookies-path-toggle-wrap">
+                    <button type="button" class="cookies-manual-toggle" id="cookies-path-toggle">Atau masukkan path file cookies manual...</button>
+                </div>
+                <div class="cookies-path-form" id="cookies-path-form" hidden>
+                    <input type="text" class="cookies-path-input" id="cookies-manual-path" placeholder="C:\Users\server lemahabang\Downloads\cookies.txt">
+                    <button type="button" class="cookies-detected__btn" id="cookies-manual-btn">Terapkan Path</button>
+                </div>
             </section>
+
 
             <div class="divider"></div>
 
@@ -133,8 +150,10 @@
                             </svg>
                             <span id="video-views"></span>
                         </span>
+                        <span class="badge--member" id="video-member-badge" hidden>👑 Members-Only</span>
                     </div>
                 </div>
+
             </section>
 
             <!-- Step 3: Quality Selector + Download -->

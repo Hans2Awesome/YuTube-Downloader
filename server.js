@@ -17,8 +17,17 @@ const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 });
 
 // ─── Middleware ────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ type: 'application/json' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Request logger (debug)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.path}`);
+  }
+  next();
+});
 
 // Multer for file uploads
 const upload = multer({ dest: UPLOADS_DIR });
@@ -26,7 +35,115 @@ const upload = multer({ dest: UPLOADS_DIR });
 // In-memory download tracker
 const downloads = new Map();
 
+// ─── Path & Cookies Helpers ────────────────────────────────
+
+/**
+ * Resolves a cookies file path whether provided as Windows path (C:\...) or WSL/Linux path (/mnt/c/...)
+ */
+function resolveCookiesPath(filePath) {
+  if (!filePath || typeof filePath !== 'string') return null;
+  const trimmed = filePath.trim().replace(/^["']|["']$/g, '');
+  if (!trimmed) return null;
+
+  // Direct check
+  if (fs.existsSync(trimmed)) return trimmed;
+
+  // If running on WSL/Linux and given a Windows path (e.g. C:\Users\... or C:/Users/...)
+  if (process.platform === 'linux') {
+    const winMatch = trimmed.match(/^([a-zA-Z]):[/\\](.*)/);
+    if (winMatch) {
+      const drive = winMatch[1].toLowerCase();
+      const rest = winMatch[2].replace(/\\/g, '/');
+      const wslPath = `/mnt/${drive}/${rest}`;
+      if (fs.existsSync(wslPath)) return wslPath;
+    }
+  }
+
+  // If running on Windows and given a WSL path (e.g. /mnt/c/...)
+  if (process.platform === 'win32') {
+    const wslMatch = trimmed.match(/^\/mnt\/([a-zA-Z])\/(.*)/);
+    if (wslMatch) {
+      const drive = wslMatch[1].toUpperCase();
+      const rest = wslMatch[2].replace(/\//g, '\\');
+      const winPath = `${drive}:\\${rest}`;
+      if (fs.existsSync(winPath)) return winPath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if a default cookies.txt exists in Downloads or workspace
+ */
+function getDefaultCookiesInfo() {
+  const candidates = [];
+  if (process.platform === 'linux') {
+    candidates.push({
+      path: '/mnt/c/Users/server lemahabang/Downloads/cookies.txt',
+      display: 'C:\\Users\\server lemahabang\\Downloads\\cookies.txt'
+    });
+  } else {
+    candidates.push({
+      path: 'C:\\Users\\server lemahabang\\Downloads\\cookies.txt',
+      display: 'C:\\Users\\server lemahabang\\Downloads\\cookies.txt'
+    });
+  }
+  candidates.push({
+    path: path.join(__dirname, 'cookies.txt'),
+    display: 'cookies.txt (workspace)'
+  });
+
+  for (const c of candidates) {
+    if (fs.existsSync(c.path)) {
+      return { found: true, path: c.path, display: c.display };
+    }
+  }
+  return { found: false, path: null, display: null };
+}
+
+/**
+ * Builds base yt-dlp arguments with JS runtime support
+ */
+function getBaseYtdlpArgs(effectiveCookies) {
+  const args = [
+    '--no-playlist',
+    '--no-js-runtimes',
+    '--js-runtimes', 'node',
+  ];
+  if (effectiveCookies && fs.existsSync(effectiveCookies)) {
+    args.push('--cookies', effectiveCookies);
+  }
+  return args;
+}
+
 // ─── Routes ───────────────────────────────────────────────
+
+/**
+ * GET /api/cookies-info
+ * Returns whether default cookies are detected
+ */
+app.get('/api/cookies-info', (req, res) => {
+  const def = getDefaultCookiesInfo();
+  res.json({
+    hasDefault: def.found,
+    defaultPath: def.path,
+    displayPath: def.display
+  });
+});
+
+/**
+ * POST /api/validate-cookies
+ * Validates a custom cookies path
+ */
+app.post('/api/validate-cookies', (req, res) => {
+  const { path: userPath } = req.body || {};
+  const resolved = resolveCookiesPath(userPath);
+  if (resolved) {
+    return res.json({ valid: true, resolvedPath: resolved });
+  }
+  res.status(400).json({ error: 'File cookies tidak ditemukan di path tersebut.' });
+});
 
 /**
  * POST /api/upload-cookies
@@ -53,17 +170,26 @@ app.post('/api/upload-cookies', upload.single('cookies'), (req, res) => {
  * Fetch video metadata using yt-dlp --dump-json
  */
 app.post('/api/info', (req, res) => {
-  const { url, cookiesPath } = req.body;
+  const body = req.body || {};
+  const { url, cookiesPath } = body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  const args = ['--dump-json', '--no-playlist', '--no-download'];
-  if (cookiesPath && fs.existsSync(cookiesPath)) {
-    args.push('--cookies', cookiesPath);
-  }
-  args.push(url);
+  // Determine effective cookies path: explicit param > default location
+  const resolvedPath = resolveCookiesPath(cookiesPath);
+  const defaultInfo = getDefaultCookiesInfo();
+  const effectiveCookies = resolvedPath || (defaultInfo.found ? defaultInfo.path : null);
+
+  const args = [
+    '--dump-json',
+    '--no-download',
+    ...getBaseYtdlpArgs(effectiveCookies),
+    url
+  ];
+
+  console.log(`🔍 Fetching info for: ${url} (Cookies: ${effectiveCookies || 'none'})`);
 
   const proc = spawn('yt-dlp', args);
   let stdout = '';
@@ -78,14 +204,23 @@ app.post('/api/info', (req, res) => {
     responded = true;
 
     if (code !== 0) {
-      // Parse common yt-dlp errors for user-friendly messages
-      let errorMsg = 'Failed to get video info.';
-      if (stderr.includes('cookies')) {
-        errorMsg = 'Cookies may be expired or invalid. Please re-export your cookies.txt.';
+      let errorMsg = 'Gagal mengambil informasi video.';
+      if (stderr.includes('Join this channel') || stderr.includes('members-only')) {
+        if (effectiveCookies) {
+          errorMsg = 'Akun di cookies.txt tidak memiliki akses langganan (membership) ke channel ini. Pastikan cookies diekspor dari akun yang sudah bergabung/join ke channel tersebut.';
+        } else {
+          errorMsg = 'Video ini khusus member (Members-only). Silakan upload atau pilih file cookies.txt dari akun YouTube yang sudah berlangganan channel ini.';
+        }
+      } else if (stderr.includes('The page needs to be reloaded')) {
+        errorMsg = 'YouTube meminta verifikasi reload. Silakan coba klik Fetch Info sekali lagi.';
+      } else if (stderr.includes('Sign in to confirm') || stderr.includes('bot')) {
+        errorMsg = 'YouTube meminta verifikasi login/bot. Pastikan cookies.txt Anda masih aktif dan diekspor dari browser yang login.';
+      } else if (stderr.includes('cookies') || stderr.includes('expired')) {
+        errorMsg = 'Cookies kedaluwarsa atau tidak valid. Silakan ekspor ulang cookies.txt.';
       } else if (stderr.includes('not available') || stderr.includes('Private video')) {
-        errorMsg = 'This video is not available. It may be private or region-locked.';
+        errorMsg = 'Video ini tidak tersedia, bersifat privat, atau dibatasi wilayah.';
       } else if (stderr.includes('Unsupported URL')) {
-        errorMsg = 'Unsupported URL. Please enter a valid YouTube video URL.';
+        errorMsg = 'URL tidak didukung. Masukkan link YouTube yang valid.';
       } else if (stderr) {
         errorMsg = stderr.split('\n').filter(l => l.startsWith('ERROR')).join(' ') || stderr.substring(0, 300);
       }
@@ -99,20 +234,22 @@ app.post('/api/info', (req, res) => {
         thumbnail: info.thumbnail || info.thumbnails?.[info.thumbnails.length - 1]?.url || '',
         duration: info.duration || 0,
         channel: info.channel || info.uploader || 'Unknown Channel',
-        viewCount: info.view_count || 0,
+        viewCount: info.view_count || info.like_count || 0,
+        availability: info.availability || 'public',
+        usedCookies: !!effectiveCookies,
       });
     } catch (e) {
-      res.status(500).json({ error: 'Failed to parse video information.' });
+      res.status(500).json({ error: 'Gagal memproses data video.' });
     }
   });
 
-  // Timeout: 30 seconds
+  // Timeout: 35 seconds
   setTimeout(() => {
     if (responded) return;
     responded = true;
     proc.kill();
-    res.status(504).json({ error: 'Request timed out. The video may be too large or the connection is slow.' });
-  }, 30000);
+    res.status(504).json({ error: 'Permintaan timed out. Koneksi lambat atau YouTube sedang merespons lama.' });
+  }, 35000);
 });
 
 /**
@@ -120,7 +257,8 @@ app.post('/api/info', (req, res) => {
  * Start downloading a video with yt-dlp
  */
 app.post('/api/download', (req, res) => {
-  const { url, cookiesPath, quality, title } = req.body;
+  const body = req.body || {};
+  const { url, cookiesPath, quality, title } = body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -129,25 +267,28 @@ app.post('/api/download', (req, res) => {
   const id = uuidv4();
   const outputTemplate = path.join(DOWNLOADS_DIR, `${id}.%(ext)s`);
 
-  // Build yt-dlp arguments
-  const args = ['--no-playlist', '--newline', '--progress'];
+  const resolvedPath = resolveCookiesPath(cookiesPath);
+  const defaultInfo = getDefaultCookiesInfo();
+  const effectiveCookies = resolvedPath || (defaultInfo.found ? defaultInfo.path : null);
+
+  const args = [
+    '--newline',
+    '--progress',
+    ...getBaseYtdlpArgs(effectiveCookies),
+  ];
 
   if (quality === 'audio') {
-    args.push('-f', 'bestaudio');
+    args.push('-f', 'bestaudio/best');
     args.push('--extract-audio', '--audio-format', 'mp3');
   } else {
     const height = quality || '1080';
-    args.push('-f', `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]`);
+    args.push('-f', `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`);
     args.push('--merge-output-format', 'mp4');
   }
 
   args.push('-o', outputTemplate);
-
-  if (cookiesPath && fs.existsSync(cookiesPath)) {
-    args.push('--cookies', cookiesPath);
-  }
-
   args.push(url);
+
 
   // Initialize download record
   downloads.set(id, {

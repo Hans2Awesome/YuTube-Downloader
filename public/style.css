@@ -66,6 +66,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
@@ -394,6 +398,104 @@ body {
 .cookies-status__remove:hover {
   background: rgba(239, 68, 68, 0.15);
   color: var(--error);
+}
+
+/* ─── Auto-Detected Cookies Box ──────────────────── */
+.cookies-detected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.875rem;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: var(--r-md);
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.cookies-detected__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cookies-detected__info strong {
+  color: #c4b5fd;
+}
+
+.cookies-detected__btn {
+  padding: 0.35rem 0.75rem;
+  background: var(--accent-gradient);
+  color: white;
+  border: none;
+  border-radius: var(--r-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--t-fast);
+}
+
+.cookies-detected__btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.cookies-manual-toggle {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--accent-cyan);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 0.25rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.cookies-manual-toggle:hover {
+  color: #67e8f9;
+}
+
+.cookies-path-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.cookies-path-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  outline: none;
+  font-family: monospace;
+}
+
+.cookies-path-input:focus {
+  border-color: var(--accent-purple);
+}
+
+.badge--member {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 999px;
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
 }
 
 /* ─── URL Input ──────────────────────────────────── */
