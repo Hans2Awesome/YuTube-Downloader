@@ -284,11 +284,11 @@ app.post('/api/download', (req, res) => {
     const height = quality || '1080';
     args.push('-f', `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`);
     args.push('--merge-output-format', 'mp4');
+    args.push('--postprocessor-args', 'Merger:-strict -2');
   }
 
   args.push('-o', outputTemplate);
   args.push(url);
-
 
   // Initialize download record
   downloads.set(id, {
@@ -352,44 +352,70 @@ app.post('/api/download', (req, res) => {
     const dl = downloads.get(id);
     if (dl) {
       const msg = data.toString();
-      // Only store actual errors, not warnings
-      if (msg.includes('ERROR') || msg.includes('error')) {
+      // Only store actual errors, not warnings or stream mappings
+      if ((msg.includes('ERROR') || msg.includes('error')) && !msg.includes('Stream #')) {
         dl.error = (dl.error || '') + msg;
       }
     }
   });
 
-  proc.on('close', (code) => {
+  proc.on('close', async (code) => {
     const dl = downloads.get(id);
     if (!dl) return;
 
-    if (code === 0) {
-      // Find the output file(s) — pick the largest one (merged output)
-      try {
-        const files = fs.readdirSync(DOWNLOADS_DIR)
-          .filter(f => f.startsWith(id))
-          .map(f => ({
-            name: f,
-            size: fs.statSync(path.join(DOWNLOADS_DIR, f)).size
-          }))
-          .sort((a, b) => b.size - a.size);
+    let files = [];
+    try {
+      files = fs.readdirSync(DOWNLOADS_DIR)
+        .filter(f => f.startsWith(id) && !f.endsWith('.temp.mp4') && !f.endsWith('.part') && !f.includes('.f'))
+        .map(f => ({
+          name: f,
+          size: fs.statSync(path.join(DOWNLOADS_DIR, f)).size
+        }))
+        .filter(f => f.size > 0)
+        .sort((a, b) => b.size - a.size);
+    } catch (e) {}
 
-        if (files.length > 0) {
-          dl.status = 'completed';
-          dl.progress = 100;
-          dl.filename = files[0].name;
-          dl.filesize = files[0].size;
-          dl.speed = '';
-          dl.eta = '';
-          console.log(`✅ Download complete [${id}]: ${files[0].name} (${(files[0].size / 1048576).toFixed(1)} MB)`);
-        } else {
-          dl.status = 'error';
-          dl.error = 'Download completed but output file was not found.';
+    // Auto-recovery: If merge failed because of opus experimental tag, merge streams with ffmpeg -strict -2
+    if (files.length === 0) {
+      try {
+        const streamFiles = fs.readdirSync(DOWNLOADS_DIR)
+          .filter(f => f.startsWith(id) && (f.endsWith('.mp4') || f.endsWith('.webm') || f.endsWith('.m4a')))
+          .map(f => path.join(DOWNLOADS_DIR, f));
+
+        const videoFile = streamFiles.find(f => f.includes('.f398.') || (f.includes('.f') && !f.includes('.f251.')));
+        const audioFile = streamFiles.find(f => f.includes('.f251.') || f.endsWith('.webm') || f.endsWith('.m4a'));
+
+        if (videoFile && audioFile) {
+          console.log(`🔧 Auto-recovering: Merging ${videoFile} and ${audioFile} with ffmpeg...`);
+          const mergedTarget = path.join(DOWNLOADS_DIR, `${id}.mp4`);
+          await new Promise((resolve, reject) => {
+            const ff = spawn('ffmpeg', ['-y', '-i', videoFile, '-i', audioFile, '-c', 'copy', '-strict', '-2', mergedTarget]);
+            ff.on('close', (ffCode) => {
+              if (ffCode === 0 && fs.existsSync(mergedTarget)) resolve();
+              else reject(new Error('FFmpeg recovery merge failed'));
+            });
+            ff.on('error', reject);
+          });
+
+          files = [{
+            name: `${id}.mp4`,
+            size: fs.statSync(mergedTarget).size
+          }];
         }
-      } catch (e) {
-        dl.status = 'error';
-        dl.error = 'Error reading download directory.';
+      } catch (err) {
+        console.warn('Auto-recover merge error:', err.message);
       }
+    }
+
+    if (files.length > 0) {
+      dl.status = 'completed';
+      dl.progress = 100;
+      dl.filename = files[0].name;
+      dl.filesize = files[0].size;
+      dl.speed = '';
+      dl.eta = '';
+      dl.error = null;
+      console.log(`✅ Download complete [${id}]: ${files[0].name} (${(files[0].size / 1048576).toFixed(1)} MB)`);
     } else {
       dl.status = 'error';
       if (!dl.error) {
@@ -415,7 +441,29 @@ app.post('/api/download', (req, res) => {
  * Poll download progress
  */
 app.get('/api/status/:id', (req, res) => {
-  const dl = downloads.get(req.params.id);
+  const id = req.params.id;
+  const dl = downloads.get(id);
+
+  // Check if a merged file already exists on disk
+  try {
+    const files = fs.readdirSync(DOWNLOADS_DIR)
+      .filter(f => f.startsWith(id) && !f.endsWith('.part') && !f.endsWith('.temp.mp4') && !f.includes('.f'))
+      .map(f => ({ name: f, size: fs.statSync(path.join(DOWNLOADS_DIR, f)).size }))
+      .filter(f => f.size > 0);
+
+    if (files.length > 0) {
+      return res.json({
+        status: 'completed',
+        progress: 100,
+        filename: files[0].name,
+        filesize: files[0].size,
+        speed: '',
+        eta: '',
+        title: dl ? dl.title : 'video',
+      });
+    }
+  } catch (e) {}
+
   if (!dl) {
     return res.status(404).json({ error: 'Download not found' });
   }
@@ -427,19 +475,34 @@ app.get('/api/status/:id', (req, res) => {
  * Serve the downloaded file
  */
 app.get('/api/file/:id', (req, res) => {
-  const dl = downloads.get(req.params.id);
-  if (!dl || dl.status !== 'completed') {
-    return res.status(404).json({ error: 'File is not ready yet' });
+  const id = req.params.id;
+  const dl = downloads.get(id);
+
+  let filename = dl && dl.status === 'completed' ? dl.filename : null;
+  let title = dl ? dl.title : 'video';
+
+  if (!filename) {
+    try {
+      const files = fs.readdirSync(DOWNLOADS_DIR)
+        .filter(f => f.startsWith(id) && !f.endsWith('.part') && !f.endsWith('.temp.mp4') && !f.includes('.f'))
+        .map(f => ({ name: f, size: fs.statSync(path.join(DOWNLOADS_DIR, f)).size }))
+        .filter(f => f.size > 0);
+      if (files.length > 0) filename = files[0].name;
+    } catch (e) {}
   }
 
-  const filePath = path.join(DOWNLOADS_DIR, dl.filename);
+  if (!filename) {
+    return res.status(404).json({ error: 'File is not ready yet or not found.' });
+  }
+
+  const filePath = path.join(DOWNLOADS_DIR, filename);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'File not found on disk' });
   }
 
   // Build a clean download filename from the video title
-  const ext = path.extname(dl.filename);
-  const sanitizedTitle = (dl.title || 'video')
+  const ext = path.extname(filename);
+  const sanitizedTitle = (title || 'video')
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -447,6 +510,7 @@ app.get('/api/file/:id', (req, res) => {
 
   res.download(filePath, `${sanitizedTitle}${ext}`);
 });
+
 
 // ─── Auto-Cleanup ─────────────────────────────────────────
 // Remove files older than 1 hour, every 30 minutes
