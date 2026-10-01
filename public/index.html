@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YTDownload — Premium Video Downloader</title>
+    <meta name="description" content="Download YouTube Premium and membership-exclusive videos using cookies authentication.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Animated Background Orbs -->
+    <div class="bg-effects" aria-hidden="true">
+        <div class="bg-orb bg-orb--purple"></div>
+        <div class="bg-orb bg-orb--cyan"></div>
+        <div class="bg-orb bg-orb--indigo"></div>
+    </div>
+
+    <main class="container">
+
+        <!-- ─── Header ─────────────────────────────── -->
+        <header class="header">
+            <div class="logo">
+                <svg class="logo__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="48" height="48">
+                    <rect width="48" height="48" rx="12" fill="url(#g1)"/>
+                    <path d="M19 14L35 24L19 34V14Z" fill="white"/>
+                    <defs><linearGradient id="g1" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#06B6D4"/>
+                    </linearGradient></defs>
+                </svg>
+                <h1 class="logo__text">YT<span>Download</span></h1>
+            </div>
+            <p class="header__tagline">Download exclusive & premium YouTube videos</p>
+        </header>
+
+        <!-- ─── Main Card ──────────────────────────── -->
+        <div class="card">
+
+            <!-- Step 1: Cookies Upload -->
+            <section class="step" id="step-cookies">
+                <div class="step__header">
+                    <span class="step__badge">1</span>
+                    <div>
+                        <h2 class="step__title">Upload Cookies</h2>
+                        <p class="step__desc">Export cookies.txt from your subscribed browser account</p>
+                    </div>
+                </div>
+
+                <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload cookies file">
+                    <input type="file" id="cookies-input" accept=".txt" hidden>
+                    <svg class="dropzone__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <p class="dropzone__text">Drag & drop <strong>cookies.txt</strong> here</p>
+                    <span class="dropzone__hint">or click to browse files</span>
+                </div>
+
+                <div class="cookies-status" id="cookies-status" hidden>
+                    <svg class="cookies-status__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span id="cookies-filename">cookies.txt uploaded</span>
+                    <button class="cookies-status__remove" id="cookies-remove" title="Remove cookies" aria-label="Remove cookies file">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <div class="divider"></div>
+
+            <!-- Step 2: Video URL -->
+            <section class="step" id="step-url">
+                <div class="step__header">
+                    <span class="step__badge">2</span>
+                    <div>
+                        <h2 class="step__title">Paste Video URL</h2>
+                        <p class="step__desc">Enter the YouTube video URL you want to download</p>
+                    </div>
+                </div>
+
+                <div class="url-input-group">
+                    <div class="url-input-wrapper">
+                        <svg class="url-input__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <input type="url" id="url-input" class="url-input" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
+                    </div>
+                    <button class="btn btn--primary" id="fetch-btn" aria-label="Fetch video info">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <span>Fetch Info</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Loading Spinner -->
+            <div class="loading" id="loading" hidden>
+                <div class="loading__spinner"></div>
+                <span>Fetching video information...</span>
+            </div>
+
+            <!-- Video Info Preview -->
+            <section class="video-info" id="video-info" hidden>
+                <div class="video-info__thumbnail-wrap">
+                    <img class="video-info__thumbnail" id="video-thumbnail" src="" alt="Video thumbnail" loading="lazy">
+                    <span class="video-info__duration" id="video-duration-badge">0:00</span>
+                </div>
+                <div class="video-info__details">
+                    <h3 class="video-info__title" id="video-title"></h3>
+                    <div class="video-info__meta">
+                        <span class="video-info__channel">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            <span id="video-channel"></span>
+                        </span>
+                        <span class="video-info__views">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <span id="video-views"></span>
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: Quality Selector + Download -->
+            <section class="step" id="step-quality" hidden>
+                <div class="divider"></div>
+                <div class="step__header">
+                    <span class="step__badge">3</span>
+                    <div>
+                        <h2 class="step__title">Select Quality</h2>
+                        <p class="step__desc">Choose your preferred video quality</p>
+                    </div>
+                </div>
+
+                <div class="quality-grid" id="quality-selector">
+                    <button class="quality-btn" data-quality="2160">
+                        <span class="quality-btn__label">4K</span>
+                        <span class="quality-btn__sub">2160p</span>
+                    </button>
+                    <button class="quality-btn quality-btn--active" data-quality="1080">
+                        <span class="quality-btn__label">Full HD</span>
+                        <span class="quality-btn__sub">1080p</span>
+                    </button>
+                    <button class="quality-btn" data-quality="720">
+                        <span class="quality-btn__label">HD</span>
+                        <span class="quality-btn__sub">720p</span>
+                    </button>
+                    <button class="quality-btn" data-quality="480">
+                        <span class="quality-btn__label">SD</span>
+                        <span class="quality-btn__sub">480p</span>
+                    </button>
+                    <button class="quality-btn" data-quality="audio">
+                        <span class="quality-btn__label">🎵</span>
+                        <span class="quality-btn__sub">MP3</span>
+                    </button>
+                </div>
+
+                <button class="btn btn--download" id="download-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>Download Video</span>
+                </button>
+            </section>
+
+            <!-- Progress Bar -->
+            <section class="progress-section" id="progress-section" hidden>
+                <div class="divider"></div>
+                <div class="progress-header">
+                    <div class="progress-status">
+                        <div class="progress-status__dot"></div>
+                        <span id="progress-label">Preparing download...</span>
+                    </div>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-meta">
+                    <span id="progress-speed">—</span>
+                    <span id="progress-eta">ETA: calculating...</span>
+                </div>
+            </section>
+
+            <!-- Download Complete -->
+            <section class="download-complete" id="download-complete" hidden>
+                <div class="divider"></div>
+                <div class="download-complete__content">
+                    <div class="download-complete__icon-wrap">
+                        <svg class="download-complete__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+                    <h3 class="download-complete__title">Download Complete!</h3>
+                    <p class="download-complete__size" id="download-size"></p>
+                    <a class="btn btn--success" id="save-btn" href="#" download>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <span>Save File</span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Error Banner -->
+            <div class="error-banner" id="error-banner" hidden>
+                <svg class="error-banner__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p id="error-text"></p>
+                <button class="error-banner__close" id="error-close" aria-label="Dismiss error">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- ─── Footer ─────────────────────────────── -->
+        <footer class="footer">
+            <p>Powered by <strong>yt-dlp</strong> &bull; Use responsibly</p>
+        </footer>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

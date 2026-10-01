@@ -1,0 +1,19 @@
+{
+  "name": "ytdownload",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.4.0",
+    "uuid": "^14.0.2",
+    "yt-dlp-exec": "^1.0.2"
+  }
+}

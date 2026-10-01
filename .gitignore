@@ -1,0 +1,26 @@
+node_modules/
+uploads/
+downloads/
+
+# Environment
+.env
+.env.local
+
+# OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Optional
+*.bak
+*.tmp
